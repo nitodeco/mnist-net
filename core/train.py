@@ -1,42 +1,75 @@
 from torch import nn, save
 from torch.utils.data import DataLoader
-from torch.optim import Adam
+from torch.optim import AdamW
+from torch.optim import lr_scheduler
 import torchvision.transforms as transforms
-from dataset import training_data
-from model import model, device
+from .dataset import training_data
+from .model import model, device
 import os
 
-epochs = 2
-learning_rate = 0.002
+epochs = 10
+learning_rate = 0.001
+batch_size = 32
+weight_decay = 0.01
 
-transform = transforms.Compose(
-    [transforms.ToTensor(), transforms.Normalize((0.7,), (0.7,))]
-)
 
-train_data_loader = DataLoader(training_data, batch_size=10, shuffle=True)
+def train():
+    transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.RandomRotation(12),
+            transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.8, 1.1)),
+        ]
+    )
 
-gradient = Adam(model.parameters(), lr=learning_rate)
-loss_fn = nn.CrossEntropyLoss()
+    train_data_loader = DataLoader(
+        training_data,
+        batch_size=batch_size,
+        shuffle=True,
+    )
 
-steps = len(train_data_loader)
+    gradient = AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
-for epoch in range(epochs):
-    for x, (images, labels) in enumerate(train_data_loader):
-        images = images.to(device)
-        labels = labels.to(device)
+    scheduler = lr_scheduler.ReduceLROnPlateau(
+        gradient, mode="min", factor=0.1, patience=2
+    )
 
-        output = model(images)
-        loss = loss_fn(output, labels)
+    loss_fn = nn.CrossEntropyLoss()
+    steps = len(train_data_loader)
+    best_loss = float("inf")
 
-        gradient.zero_grad()
-        loss.backward()
-        gradient.step()
+    for epoch in range(epochs):
+        epoch_loss = 0
+        for x, (images, labels) in enumerate(train_data_loader):
+            images = images.to(device)
+            labels = labels.to(device)
 
-        if (x + 1) % 100 == 0:
-            print(
-                f"Epochs [{epoch+1}/{epochs}], Step[{x+1}/{steps}], Loss: {loss.item():.4f}"
-            )
+            output = model(images)
+            loss = loss_fn(output, labels)
 
-os.makedirs("models", exist_ok=True)
-save(model.state_dict(), "models/mnist_model.pth")
-print("Training complete. Model saved to models/mnist_model.pth")
+            gradient.zero_grad()
+            loss.backward()
+            gradient.step()
+
+            epoch_loss += loss.item()
+
+            if (x + 1) % 100 == 0:
+                print(
+                    f"Epoch {epoch+1}/{epochs}, Step {x+1}/{steps}, Loss: {loss.item():.4f}"
+                )
+
+        avg_loss = epoch_loss / len(train_data_loader)
+        scheduler.step(avg_loss)
+
+        current_lr = gradient.param_groups[0]["lr"]
+        print(
+            f"Epoch {epoch+1}/{epochs}, Average Loss: {avg_loss:.4f}, Learning Rate: {current_lr:.6f}"
+        )
+
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            save(model.state_dict(), "models/mnist_model_best.pth")
+
+    os.makedirs("models", exist_ok=True)
+    save(model.state_dict(), "models/mnist_model.pth")
+    print("Training complete. Best model saved to models/mnist_model_best.pth")

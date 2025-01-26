@@ -17,14 +17,8 @@ pip3 install -r requirements.txt
 python3 ./common/dataset.py
 ```
 
-4. Train the model
+4. Train and evaluate the model
 
 ```bash
-python3 ./core/train.py
-```
-
-5. Evaluate the model
-
-```bash
-python3 ./core/evaluate.py
+python3 ./main.py
 ```
