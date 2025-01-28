@@ -8,18 +8,20 @@ else:
 
 
 class Network(nn.Module):
-    def __init__(self):
+    def __init__(self, layer_sizes=[256, 128], dropout_rates=[0.3, 0.3]):
         super().__init__()
         self.flatten = nn.Flatten()
-        self.linear_relu_stack = nn.Sequential(
-            nn.Linear(28 * 28, 256),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(128, 10),
-        )
+
+        layers = []
+        prev_size = 28 * 28
+
+        for size, dropout in zip(layer_sizes, dropout_rates):
+            layers.extend([nn.Linear(prev_size, size), nn.ReLU(), nn.Dropout(dropout)])
+            prev_size = size
+
+        layers.append(nn.Linear(prev_size, 10))
+
+        self.linear_relu_stack = nn.Sequential(*layers)
 
     def forward(self, batch):
         image = batch[0] if isinstance(batch, tuple) else batch
