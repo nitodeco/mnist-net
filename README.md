@@ -1,6 +1,6 @@
 # MNIST-Net
 
-A basic implementation of a linear neural network trained on the [MNIST handwritten digits dataset](https://en.wikipedia.org/wiki/MNIST_database). I used this as an excercise to apply my theoretical knowledge about neural networks and machine learning and experiment with realistic data. The network is defined, trained and evaluated using [PyTorch](https://pytorch.org/).
+Implementation of a neural network trained on the [MNIST handwritten digits dataset](https://en.wikipedia.org/wiki/MNIST_database). I used this as an excercise to apply my theoretical knowledge about neural networks and machine learning and experiment with realistic data. This project is built with [PyTorch](https://pytorch.org/).
 
 # Usage
 
@@ -14,11 +14,13 @@ pip3 install -r requirements.txt
 3. Download the dataset
 
 ```bash
-python3 ./common/dataset.py
+python3 ./core/dataset.py
 ```
 
-4. Train and evaluate the model
+4. Start the app
 
 ```bash
-python3 ./main.py
+streamlit run app.py
 ```
+
+Now you can visit the app at [http://localhost:8501](http://localhost:8501) and start training, evaluating and testing the model.

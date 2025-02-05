@@ -1,5 +1,5 @@
 from core.train import train
-from core.evaluate import evaluate
+from core.eval import evaluate
 
 
 def main():

@@ -1,0 +1,9 @@
+[server]
+headless = true
+
+[logger]
+level = "info"
+
+[theme]
+base="light"
+primaryColor="#443DFF"

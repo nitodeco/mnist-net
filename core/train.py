@@ -1,64 +1,60 @@
 from torch import nn, save
 from torch.utils.data import DataLoader
-from torch.optim import AdamW
+from torch.optim import Adam
 from torch.optim import lr_scheduler
 from .dataset import training_data
 from .model import model, device
 import os
 import time
-import json
+import torch
 
 
-def save_model_config(layer_sizes, dropout_rates, timestamp=None):
-    os.makedirs("models", exist_ok=True)
-    config = {"layer_sizes": layer_sizes, "dropout_rates": dropout_rates}
-
-    if timestamp:
-        config_path = f"models/config_{timestamp}.json"
-        with open(config_path, "w") as f:
-            json.dump(config, f)
-
-    with open("models/config.json", "w") as f:
-        json.dump(config, f)
-
-
-def train(
-    epochs=8, learning_rate=0.0015, batch_size=32, weight_decay=0.005, callback=None
-):
+def train(epochs=10, learning_rate=0.001, batch_size=32, callback=None):
     train_data_loader = DataLoader(
         training_data,
         batch_size=batch_size,
         shuffle=True,
     )
 
-    gradient = AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    model.train()
+    gradient = Adam(model.parameters(), lr=learning_rate)
 
     scheduler = lr_scheduler.ReduceLROnPlateau(
-        gradient, mode="min", factor=0.1, patience=2
+        gradient, mode="min", factor=0.1, patience=2, verbose=True
     )
 
     loss_fn = nn.CrossEntropyLoss()
     steps = len(train_data_loader)
-    best_loss = float("inf")
+
+    print(f"\nStarting training with {epochs} epochs...")
+    print(f"Learning rate: {learning_rate}, Batch size: {batch_size}")
 
     for epoch in range(epochs):
+        model.train()
         epoch_start_time = time.time()
         epoch_loss = 0
-        losses = []
+        correct = 0
+        total = 0
 
         for x, (images, labels) in enumerate(train_data_loader):
             images = images.to(device)
             labels = labels.to(device)
 
+            gradient.zero_grad()
+
             output = model(images)
             loss = loss_fn(output, labels)
 
-            gradient.zero_grad()
             loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
             gradient.step()
 
             epoch_loss += loss.item()
-            losses.append(loss.item())
+            _, predicted = torch.max(output.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
 
             if callback:
                 progress = (epoch * steps + x + 1) / (epochs * steps)
@@ -68,38 +64,30 @@ def train(
 
                 callback(progress, loss.item(), eta, epoch)
 
-            if (x + 1) % batch_size == 0:
+            if (x + 1) % (steps // 5) == 0:
                 print(
-                    f"Epoch {epoch+1}/{epochs}, Step {x+1}/{steps}, Loss: {loss.item():.4f}"
+                    f"Epoch {epoch+1}/{epochs}, "
+                    f"Step {x+1}/{steps}, "
+                    f"Loss: {loss.item():.4f}, "
+                    f"Accuracy: {100 * correct/total:.2f}%"
                 )
 
         avg_loss = epoch_loss / len(train_data_loader)
-        scheduler.step(avg_loss)
+        accuracy = 100 * correct / total
+        epoch_time = time.time() - epoch_start_time
 
-        current_lr = gradient.param_groups[0]["lr"]
         print(
-            f"Epoch {epoch+1}/{epochs}, Average Loss: {avg_loss:.4f}, Learning Rate: {current_lr:.6f}"
+            f"\nEpoch {epoch+1}/{epochs} Summary:"
+            f"\n - Average Loss: {avg_loss:.4f}"
+            f"\n - Accuracy: {accuracy:.2f}%"
+            f"\n - Time: {epoch_time:.2f}s"
         )
 
-        if avg_loss < best_loss:
-            best_loss = avg_loss
-            timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-            layer_sizes = [
-                layer.out_features
-                for layer in model.linear_relu_stack
-                if isinstance(layer, nn.Linear)
-            ][:-1]
-            dropout_rates = [
-                layer.p
-                for layer in model.linear_relu_stack
-                if isinstance(layer, nn.Dropout)
-            ]
-            save_model_config(layer_sizes, dropout_rates, timestamp)
-            save(
-                model.state_dict(),
-                f"models/mnist_model_{timestamp}.pth",
-            )
+        scheduler.step(avg_loss)
+        current_lr = gradient.param_groups[0]["lr"]
+        print(f" - Learning Rate: {current_lr:.6f}\n")
 
     os.makedirs("models", exist_ok=True)
-    save(model.state_dict(), "models/mnist_model.pth")
-    print("Training complete. Best model saved to models/mnist_model_best.pth")
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    save(model.state_dict(), f"models/mnist_model_{timestamp}.pth")
+    print(f"\nTraining complete. Model saved with accuracy: {accuracy:.2f}%")
